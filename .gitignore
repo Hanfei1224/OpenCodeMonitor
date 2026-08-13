@@ -1,0 +1,23 @@
+# ===== 敏感文件：严禁提交 =====
+# 用户配置（含 OpenCode API Key）
+config.json
+
+# ===== 构建产物 =====
+dist/
+build/
+__pycache__/
+*.pyc
+*.pyo
+
+# ===== 安装包：随 GitHub Release 发布，不入仓库 =====
+installer/*.exe
+installer/*.exe.manifest
+
+# ===== 临时/日志 =====
+.tmp/
+*.log
+*.bak.json
+
+# ===== 系统 =====
+.DS_Store
+Thumbs.db
