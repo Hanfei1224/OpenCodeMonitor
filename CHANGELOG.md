@@ -5,6 +5,18 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.2] - 2026-08-14
+
+### Fixed
+- 修复**重启电脑后首次启动置顶失效**的问题：冷启动时 WebView2 初始化慢，窗口到
+  `on_navigation_start`（`edgechromium.on_navigation_start`）才真正显示，而此前置顶只在
+  窗口显示前用原生 `WS_EX_TOPMOST` 位设置，随后被 WinForms 用缓存的托管
+  `TopMost=False`（`on_top=False` 导致）覆盖，出现 Win+D 能缩略、其他窗口能盖住的现象。
+  - `apply_topmost` 现在同时同步 WinForms 托管属性 `native.TopMost`，托管状态与真实窗口一致，
+    后续 Show / Activate / 重建句柄都不会把置顶抹掉。
+  - `on_start` 的样式重挂从固定 `sleep(1.5)` 改为等待 `window.events.loaded`
+    （页面真正加载完成、窗口稳定显示后），超时 20s 兜底，覆盖冷启动慢初始化场景。
+
 ## [1.1.1] - 2026-08-13
 
 ### Changed

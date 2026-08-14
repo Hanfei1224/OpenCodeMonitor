@@ -353,6 +353,16 @@ def apply_topmost(on):
     hwnd = get_hwnd()
     if not hwnd:
         return
+    on = bool(on)
+    # 同步 WinForms 托管 TopMost 状态。只改原生 WS_EX_TOPMOST 位的话，WinForms 后续在
+    # Show/Activate/重建句柄时仍会用缓存的 TopMost=False 覆盖——冷启动 WebView2 初始化慢，
+    # 窗口晚于本次应用才真正显示，置顶就丢了；必须让托管状态一致才不会被回写抹掉。
+    try:
+        native = getattr(window, 'native', None)
+        if native is not None:
+            native.TopMost = on
+    except Exception:
+        pass
     ex = _get_exstyle(hwnd)
     ex = ex | WS_EX_TOPMOST if on else ex & ~WS_EX_TOPMOST
     _set_exstyle(hwnd, ex)
@@ -462,9 +472,13 @@ def on_start():
                 _user32.SetWindowPos(hwnd, 0, int(sx), int(sy), 0, 0,
                                      SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
 
-    # 窗口完全显示后再次应用样式，避免与 pywebview 的 show/hide 时序竞争
+    # 页面真正加载完成（窗口已稳定显示）后再重挂样式。冷启动 WebView2 初始化慢，固定 sleep
+    # 可能在窗口真正显示前就重挂、随后又被覆盖；改等 loaded 事件，超时兜底。
     def _reauth():
-        time.sleep(1.5)
+        try:
+            window.events.loaded.wait(20)
+        except Exception:
+            time.sleep(3)
         apply_click_through(state.click_through)
         apply_topmost(state.topmost)
         hide_from_taskbar()
