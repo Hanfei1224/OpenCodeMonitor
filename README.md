@@ -1,8 +1,8 @@
 # OpencodeMonitor
 
-> 一个开源的 OpenCode Go 套餐用量监控桌面磁贴 —— 无边框、置顶、可鼠标穿透的悬浮小部件，实时展示三个时间窗口的用量。
+> 一个开源的 OpenCode Go 套餐用量监控桌面磁贴 —— 无边框、置顶、可鼠标穿透的悬浮小部件，实时展示三个时间窗口的用量与本地 token 消耗统计。
 
-![Version](https://img.shields.io/badge/version-1.1.1-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2B-blue)
 ![Tech](https://img.shields.io/badge/tech-Python%20%2F%20pywebview%20%2F%20pystray-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -19,12 +19,20 @@ OpencodeMonitor 是运行在 Windows 桌面上的一枚半透明磁贴，通过 
 
 每个环同时给出中心百分比、重置倒计时和按官方配额换算的已用美元金额（5 小时 = $12、每周 = $30、每月 = $60）。
 
+右侧的**今日 token 统计**列展示今日的 总 token / 输入 / 输出 / 缓存 / 缓存率，来自本机
+**综合采集**（opencode 本地库 + Claude Code 会话记录，详见[数据来源](#数据来源与口径)），
+即使监测程序未运行期间产生的消耗，下次启动也会自动补全。
+
 ## 功能特性
 
 - 🎨 **三环形用量图**：5 小时 / 本周 / 本月百分比 + 重置倒计时 + 已用美元（`已用 $X.XX / $Y`）
+- 📈 **今日 token 统计**：今日总 / 输入 / 输出 / 缓存 / 缓存率，右侧竖排、数值等宽底色块（数字自动缩写 `k`/`M`/`B`）
+- 📊 **用量统计窗口**：月度 token 日历（色块深浅 = 当日用量），仅显示有消耗的月份、切换月份即时无感；
+  悬浮日期显示当日明细；窗口位置退出保存、下次打开原位恢复
+- 🔄 **综合采集**：合并 `opencode.db` + Claude Code 会话 JSONL 双数据源，历史消耗自动补全、不局限于单一套餐
 - 🖱️ **鼠标穿透 / 置顶**：可一键切换，作为悬浮磁贴不挡操作
-- ⚙️ **主题自定义**：背景透明度、背景色、强调色，实时预览并持久化
-- 🔔 **托盘常驻**：窗口不进任务栏与 Alt+Tab，仅通过托盘图标操作（显示窗口 / 置顶 / 穿透 / 退出）
+- ⚙️ **主题自定义**：背景透明度、背景色、强调色，实时预览并持久化（不透明度只作用于窗口基底，控件位置与配色恒定）
+- 🔔 **托盘常驻**：窗口不进任务栏与 Alt+Tab，仅通过托盘图标操作（显示窗口 / 用量统计 / 置顶 / 穿透 / 退出）
 - 📍 **位置记忆**：退出时记住窗口位置，下次启动原位恢复
 - ⏱️ **响应耗时**：底部实时显示每次接口请求的毫秒耗时
 - 🔑 **内嵌 API Key 配置**：未配置或 Key 无效时自动弹出填写面板，保存后立即重连
@@ -66,14 +74,14 @@ OpencodeMonitor 是运行在 Windows 桌面上的一枚半透明磁贴，通过 
 | `api_key` | string | `""` | OpenCode Go API Key |
 | `refresh_seconds` | int | `60` | 用量刷新间隔（秒） |
 | `bg_color` | string | `"#1e2330"` | 卡片背景色 |
-| `bg_opacity` | number | `1.0` | 背景不透明度 0~1（低于 0.6 时自动为文字垫底色） |
-| `accent_color` | string | `"#5b9bff"` | 强调色（环形图、状态圆点） |
-| `window_x` / `window_y` | int\|null | `null` | 上次退出时窗口位置（物理像素） |
+| `bg_opacity` | number | `1.0` | 背景不透明度 0~1（只作用于窗口基底） |
+| `accent_color` | string | `"#5b9bff"` | 强调色（环形图、状态圆点、日历色块） |
+| `window_x` / `window_y` | int\|null | `null` | 上次退出时主窗口位置（物理像素） |
+| `stats_window_x` / `stats_window_y` | int\|null | `null` | 上次退出时用量统计窗口位置（物理像素） |
 | `topmost` | bool | `true` | 启动时是否置顶 |
 | `click_through` | bool | `true` | 启动时是否鼠标穿透 |
 
-> 背景透明度为 0 时，卡片完全透明、只显示文字与图形；为了让文字依旧清晰，
-> 程序会为所有带文字的元素自动垫上一层半透明深色底色（圆角矩形 / 圆形），不遮挡下层内容。
+> 背景透明度为 0 时，卡片完全透明、只显示文字与图形。不透明度只改变窗口基底，所有控件的位置、尺寸与配色保持不变。
 
 ## 从源码构建
 
@@ -114,8 +122,9 @@ python -m PyInstaller --noconfirm --clean OpencodeMonitor.spec
 
 ```
 OpencodeMonitor/
-├── main.py                 # 主程序：数据抓取、窗口管理、托盘、JS 桥接
-├── index.html              # 前端界面：三环图、配置面板、主题
+├── main.py                 # 主程序：数据抓取、综合采集、窗口管理、托盘、JS 桥接
+├── index.html              # 前端界面：三环图、今日统计、配置面板、主题
+├── stats.html              # 用量统计窗口：月度 token 日历
 ├── OpencodeMonitor.spec    # PyInstaller 打包配置
 ├── installer.iss           # Inno Setup 安装脚本
 ├── icon.ico                # 应用/窗口图标（与托盘图标同款自绘）
@@ -127,10 +136,20 @@ OpencodeMonitor/
 
 ## 数据来源与口径
 
-用量数据来自 OpenCode 官方接口 `GET https://opencode.ai/zen/go/v1/usage`，认证需要同时携带
-`Authorization: Bearer <key>` 与 `x-api-key: <key>` 两个请求头（详见 [docs/adr/0001-use-official-usage-api.md](docs/adr/0001-use-official-usage-api.md)）。
-接口只返回 0–100 的整数百分比，因此"已用美元"按官方配额换算：**5 小时 = $12、每周 = $30、每月 = $60**。
-这与官网仪表盘口径一致，不读取本地代理日志。
+用量数据来自两个层面：
+
+- **配额用量（三环图）**：OpenCode 官方接口 `GET https://opencode.ai/zen/go/v1/usage`，认证需要同时携带
+  `Authorization: Bearer <key>` 与 `x-api-key: <key>` 两个请求头（详见 [docs/adr/0001-use-official-usage-api.md](docs/adr/0001-use-official-usage-api.md)）。
+  接口只返回 0–100 的整数百分比，因此"已用美元"按官方配额换算：**5 小时 = $12、每周 = $30、每月 = $60**。
+  这与官网仪表盘口径一致。
+
+- **今日统计与月度日历（token 消耗）**：综合采集本机两个数据源，合并后按天聚合——
+  - opencode 本地库 `~/.local/share/opencode/opencode.db`（message 表，含 tokens 明细）
+  - Claude Code 会话记录 `~/.claude/projects/*.jsonl`（assistant 消息的 usage）
+
+  统计口径为 `total = input + output + cache_read + cache_write`，缓存率 = `cache_read ÷ (cache_read + input)`。
+  因为都是外部工具自身写入的原始记录，监测程序未运行期间产生的消耗，下次启动会**自动补全**，
+  且不局限于 OpenCode Go 套餐。
 
 ## 许可证
 

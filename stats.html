@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>用量统计</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root { --acc-r:91; --acc-g:155; --acc-b:255; }  /* 强调色 RGB，JS 按配置覆盖 */
+  html, body { height:100%; }
+  body {
+    background: rgba(30,35,48,1); color:#e8ecf4;
+    font:12px/1.4 "Segoe UI","Microsoft YaHei",sans-serif;
+    user-select:none; overflow:hidden;
+  }
+  #card { padding:14px 16px 12px; height:100%; display:flex; flex-direction:column; }
+  .top { display:flex; align-items:center; gap:10px; margin-bottom:10px; flex:none; }
+  .title { font-size:15px; font-weight:600; }
+  .meta { font-size:11px; color:#8a93a6; }
+  .month-trigger { margin-left:auto; cursor:pointer; font-size:13px; font-weight:600;
+                   padding:4px 10px; border-radius:8px; background:rgba(255,255,255,.07); }
+  .month-trigger .arrow { display:inline-block; margin-left:5px; color:#8a93a6; font-size:9px; }
+  #month-menu { position:absolute; display:none; z-index:60; min-width:110px;
+                background:#232936; border:1px solid rgba(255,255,255,.14);
+                border-radius:8px; padding:4px; box-shadow:0 6px 18px rgba(0,0,0,.4); }
+  #month-menu.open { display:block; }
+  .mitem { padding:5px 10px; border-radius:6px; font-size:12px; color:#e8ecf4;
+           cursor:pointer; display:flex; align-items:center; gap:7px; }
+  .mitem:hover { background:rgba(255,255,255,.1); }
+  .mitem.on { background:rgba(var(--acc-r),var(--acc-g),var(--acc-b),.22); color:#fff; }
+  .mitem .tick { visibility:hidden; color:rgb(var(--acc-r),var(--acc-g),var(--acc-b)); }
+  .mitem.on .tick { visibility:visible; }
+  .wlabels { display:grid; grid-template-columns:repeat(7,44px); gap:6px; margin-bottom:6px;
+             font-size:10px; color:#8a93a6; text-align:center; flex:none; }
+  .grid { display:grid; grid-template-columns:repeat(7,44px); gap:6px; align-content:start; }
+  .cell { width:44px; height:44px; border-radius:5px; background:rgba(255,255,255,.05);
+          display:flex; align-items:center; justify-content:center; font-size:12px;
+          color:#e8ecf4; text-shadow:0 1px 2px rgba(0,0,0,.7); }
+  .cell:hover { outline:1px solid #fff; }
+  .sum { display:flex; gap:18px; margin-top:auto; padding-top:10px; flex:none;
+         border-top:1px solid rgba(255,255,255,.08); font-size:11px; color:#8a93a6; }
+  .sum b { color:#e8ecf4; font-weight:600; margin-left:4px; }
+  #tip { position:fixed; display:none; pointer-events:none; z-index:99;
+         background:rgba(20,24,34,.95); border:1px solid rgba(255,255,255,.15);
+         border-radius:6px; padding:8px 10px; font-size:11px; white-space:nowrap; }
+  #tip .d { font-weight:600; margin-bottom:4px; }
+  #tip .row { display:flex; align-items:baseline; gap:10px; }
+  #tip .row span { color:#8a93a6; flex:none; width:52px; }
+  #tip .row b { font-weight:600; font-variant-numeric:tabular-nums; }
+  .empty { color:#8a93a6; text-align:center; margin-top:30px; }
+</style>
+</head>
+<body>
+<div id="card">
+  <div class="top">
+    <span class="title">用量统计</span>
+    <span class="meta" id="meta"></span>
+    <span class="month-trigger" id="month-trigger">— <span class="arrow">▾</span></span>
+  </div>
+  <div id="month-menu"></div>
+  <div class="wlabels"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+  <div class="grid" id="grid"></div>
+  <div class="sum">
+    <span>当月总<b id="s-total">0</b></span>
+    <span>输入<b id="s-input">0</b></span>
+    <span>输出<b id="s-output">0</b></span>
+    <span>缓存率<b id="s-hit">0.0%</b></span>
+  </div>
+</div>
+<div id="tip"></div>
+<script>
+  var accent = [91,155,255], bg = [30,35,48];
+  var currentYm = null; // [year, month]
+
+  function hexToRgb(h){ h=(h||'').replace('#',''); if(h.length!==6) return accent;
+    return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)]; }
+  // 把强调色同步给 CSS 变量（月份菜单高亮/对勾等跟随配置色）
+  function applyAccent(){
+    document.documentElement.style.setProperty('--acc-r', accent[0]);
+    document.documentElement.style.setProperty('--acc-g', accent[1]);
+    document.documentElement.style.setProperty('--acc-b', accent[2]);
+  }
+  // main.py 注入的主题配色，首帧即用户设置，避免先默认色再变强调色的闪烁
+  if (typeof window.__STATS_THEME__ !== 'undefined' && window.__STATS_THEME__) {
+    accent = hexToRgb(window.__STATS_THEME__.accent_color);
+    bg = hexToRgb(window.__STATS_THEME__.bg_color);
+    document.body.style.background = 'rgba('+bg[0]+','+bg[1]+','+bg[2]+',1)';
+  }
+  applyAccent();
+  function fmt(n){ return (n||0).toLocaleString('en-US'); }
+  function fmtNum(n){ n=n||0; if(n>=1e6) return (n/1e6).toFixed(1).replace(/\.0$/,'')+'M';
+    if(n>=1e3) return (n/1e3).toFixed(1).replace(/\.0$/,'')+'K'; return String(n); }
+  function ymLabel(ym){ return ym[0]+'年'+ym[1]+'月'; }
+  function iso(d){ return String(d[0])+'-'+String(d[1]).padStart(2,'0'); }
+
+  function showTip(date, g){
+    var tip = document.getElementById('tip');
+    var cache = (g.cache_read||0)+(g.cache_write||0);  // 缓存数不区分读写
+    tip.innerHTML =
+      '<div class="d">'+date+'</div>'+
+      '<div class="row"><span>总 token</span><b>'+fmt(g.total)+'</b></div>'+
+      '<div class="row"><span>输入</span><b>'+fmt(g.input)+'</b></div>'+
+      '<div class="row"><span>输出</span><b>'+fmt(g.output)+'</b></div>'+
+      '<div class="row"><span>缓存</span><b>'+fmt(cache)+'</b></div>'+
+      '<div class="row"><span>缓存率</span><b>'+(g.hit_rate*100).toFixed(1)+'%</b></div>'+
+      '<div class="row"><span>请求</span><b>'+g.requests+' 次</b></div>';
+    tip.style.display='block';
+  }
+  function moveTip(e){
+    var tip = document.getElementById('tip');
+    tip.style.left = Math.min(e.clientX+14, window.innerWidth-220)+'px';
+    tip.style.top  = Math.min(e.clientY+12, window.innerHeight-140)+'px';
+  }
+
+  function buildMonthMenu(months){
+    var m = document.getElementById('month-menu');
+    m.innerHTML='';
+    (months||[]).forEach(function(ym){
+      var el = document.createElement('div');
+      el.className='mitem';
+      if (currentYm && currentYm[0]===ym[0] && currentYm[1]===ym[1]) el.className += ' on';
+      el.innerHTML = '<span class="tick">✓</span>'+ymLabel(ym);
+      el.addEventListener('click', function(e){
+        e.stopPropagation();
+        m.classList.remove('open');
+        loadMonth(ym[0], ym[1]);
+      });
+      m.appendChild(el);
+    });
+  }
+
+  function render(view){
+    var days = view.days || {};
+    var months = view.available_months || [];
+    currentYm = [view.year, view.month];
+    document.getElementById('month-trigger').childNodes[0].textContent = ymLabel(currentYm)+' ';
+    document.getElementById('meta').textContent = view.error ? ('暂无数据: '+view.error) : '';
+    buildMonthMenu(months);
+    var grid = document.getElementById('grid');
+    grid.innerHTML='';
+    var nDays = new Date(view.year, view.month, 0).getDate();
+    var sumT=0, sumI=0, sumO=0, cRead=0, cIn=0;
+    for (var d=1; d<=nDays; d++){
+      var dateStr = iso(currentYm)+'-'+String(d).padStart(2,'0');
+      var g = days[dateStr] || {total:0,input:0,output:0,cache_read:0,cache_write:0,requests:0,hit_rate:0,alpha:0.12};
+      sumT+=g.total; sumI+=g.input; sumO+=g.output; cRead+=g.cache_read; cIn+=g.input;
+      var col = (new Date(view.year, view.month-1, d).getDay()+6)%7;
+      var cell = document.createElement('div');
+      cell.className='cell';
+      if (g.total>0) cell.style.background = 'rgba('+accent[0]+','+accent[1]+','+accent[2]+','+g.alpha+')';
+      cell.textContent = d;
+      cell.addEventListener('mouseenter', (function(ds, gs){ return function(){ showTip(ds, gs); }; })(dateStr, g));
+      cell.addEventListener('mousemove', moveTip);
+      cell.addEventListener('mouseleave', function(){ document.getElementById('tip').style.display='none'; });
+      cell.style.gridColumn = (col+1);
+      grid.appendChild(cell);
+    }
+    var denom = cRead + cIn;
+    document.getElementById('s-total').textContent = fmtNum(sumT);
+    document.getElementById('s-input').textContent = fmtNum(sumI);
+    document.getElementById('s-output').textContent = fmtNum(sumO);
+    document.getElementById('s-hit').textContent = (denom ? (cRead/denom*100).toFixed(1) : '0.0')+'%';
+  }
+
+  function loadMonth(year, month){
+    pywebview.api.get_month_stats(year, month).then(render);
+  }
+
+  function init(){
+    pywebview.api.get_status().then(function(st){
+      accent = hexToRgb(st.settings.accent_color);
+      bg = hexToRgb(st.settings.bg_color);
+      document.body.style.background = 'rgba('+bg[0]+','+bg[1]+','+bg[2]+',1)';
+      applyAccent();
+    });
+    loadMonth(new Date().getFullYear(), new Date().getMonth()+1);
+  }
+
+  var m = document.getElementById('month-menu');
+  document.getElementById('month-trigger').addEventListener('click', function(e){
+    e.stopPropagation();
+    var r = this.getBoundingClientRect();
+    m.style.left = Math.min(r.left, window.innerWidth-140)+'px';
+    m.style.top = (r.bottom+4)+'px';
+    m.classList.toggle('open');
+  });
+  document.addEventListener('click', function(){ m.classList.remove('open'); });
+
+  var dragging = false;
+  document.getElementById('card').addEventListener('mousedown', function(e){
+    if (e.target.closest && e.target.closest('.cell,#tip,#month-menu,.month-trigger,.mitem')) return;
+    dragging = true; pywebview.api.start_drag();
+  });
+  window.addEventListener('mousemove', function(){ if (dragging) pywebview.api.move_window(0,0); });
+  window.addEventListener('mouseup', function(){ dragging = false; });
+
+  window.addEventListener('pywebviewready', init);
+  setTimeout(function(){ if (window.pywebview && window.pywebview.api) init(); }, 500);
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 ; OpencodeMonitor — Inno Setup 安装脚本
 #define MyAppName "OpencodeMonitor"
 #define MyAppExeName "OpencodeMonitor.exe"
-#define MyAppVersion "1.1.2"
+#define MyAppVersion "1.2.0"
 
 [Setup]
 AppId={{8E9F3B2C-5A11-4D27-9C6B-4A1E2F3C4D5E}
