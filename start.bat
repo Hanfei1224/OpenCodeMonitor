@@ -19,7 +19,7 @@ if errorlevel 1 (
   )
 )
 
-start "" pythonw "%~dp0main.py"
+start "" pythonw -m core.main
 echo Started. Right-click the tray icon to exit.
 timeout /t 3 /nobreak >nul
 exit /b 0

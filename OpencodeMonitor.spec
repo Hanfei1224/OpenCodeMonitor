@@ -1,9 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
+# 入口已迁到 core/main.py；pathex 指向项目根以解析 core 包
 
 
 a = Analysis(
-    ['main.py'],
-    pathex=[],
+    ['core/main.py'],
+    pathex=[os.path.dirname(os.path.abspath(SPECPATH))],
     binaries=[],
     datas=[('index.html', '.'), ('icon.ico', '.'), ('stats.html', '.')],
     hiddenimports=[],

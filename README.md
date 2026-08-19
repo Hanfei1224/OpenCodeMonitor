@@ -2,7 +2,7 @@
 
 > 一个开源的 OpenCode Go 套餐用量监控桌面磁贴 —— 无边框、置顶、可鼠标穿透的悬浮小部件，实时展示三个时间窗口的用量与本地 token 消耗统计。
 
-![Version](https://img.shields.io/badge/version-1.2.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.1-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2B-blue)
 ![Tech](https://img.shields.io/badge/tech-Python%20%2F%20pywebview%20%2F%20pystray-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -20,7 +20,7 @@ OpencodeMonitor 是运行在 Windows 桌面上的一枚半透明磁贴，通过 
 每个环同时给出中心百分比、重置倒计时和按官方配额换算的已用美元金额（5 小时 = $12、每周 = $30、每月 = $60）。
 
 右侧的**今日 token 统计**列展示今日的 总 token / 输入 / 输出 / 缓存 / 缓存率，来自本机
-**综合采集**（opencode 本地库 + Claude Code 会话记录，详见[数据来源](#数据来源与口径)），
+**综合采集**（OpenCode、Claude Code、pi、ZCode、Codex，详见[数据来源](#数据来源与口径)），
 即使监测程序未运行期间产生的消耗，下次启动也会自动补全。
 
 ## 功能特性
@@ -29,7 +29,7 @@ OpencodeMonitor 是运行在 Windows 桌面上的一枚半透明磁贴，通过 
 - 📈 **今日 token 统计**：今日总 / 输入 / 输出 / 缓存 / 缓存率，右侧竖排、数值等宽底色块（数字自动缩写 `k`/`M`/`B`）
 - 📊 **用量统计窗口**：月度 token 日历（色块深浅 = 当日用量），仅显示有消耗的月份、切换月份即时无感；
   悬浮日期显示当日明细；窗口位置退出保存、下次打开原位恢复
-- 🔄 **综合采集**：合并 `opencode.db` + Claude Code 会话 JSONL 双数据源，历史消耗自动补全、不局限于单一套餐
+- 🔄 **综合采集**：合并 OpenCode、Claude Code、pi、ZCode、Codex 五个本地数据源，历史消耗自动补全
 - 🖱️ **鼠标穿透 / 置顶**：可一键切换，作为悬浮磁贴不挡操作
 - ⚙️ **主题自定义**：背景透明度、背景色、强调色，实时预览并持久化（不透明度只作用于窗口基底，控件位置与配色恒定）
 - 🔔 **托盘常驻**：窗口不进任务栏与 Alt+Tab，仅通过托盘图标操作（显示窗口 / 用量统计 / 置顶 / 穿透 / 退出）
@@ -92,7 +92,7 @@ OpencodeMonitor 是运行在 Windows 桌面上的一枚半透明磁贴，通过 
 pip install pywebview pystray pillow
 
 # 2. 源码运行（开发调试）
-python main.py
+python -m core.main
 
 # 3. 打包 exe（PyInstaller）
 python -m PyInstaller --noconfirm --clean OpencodeMonitor.spec
@@ -122,7 +122,15 @@ python -m PyInstaller --noconfirm --clean OpencodeMonitor.spec
 
 ```
 OpencodeMonitor/
-├── main.py                 # 主程序：数据抓取、综合采集、窗口管理、托盘、JS 桥接
+├── core/                   # 核心代码包（高内聚低耦合，按职责拆分）
+│   ├── main.py             # 入口：窗口创建、主题注入、boot 时序、线程装配
+│   ├── config.py           # 配置读写、默认值、主题键、位置/开关持久化
+│   ├── state.py            # 共享状态：窗口引用、缓存、锁、事件
+│   ├── win32.py            # 原生窗口：置顶/穿透/任务栏隐藏/位置保存
+│   ├── opencode.py         # OpenCode 用量 API 拉取与轮询循环
+│   ├── stats.py            # 本地 token 统计：五数据源采集聚合
+│   ├── api.py              # pywebview JS 桥（Api）+ 统计窗口生命周期
+│   └── tray.py             # 系统托盘图标与菜单
 ├── index.html              # 前端界面：三环图、今日统计、配置面板、主题
 ├── stats.html              # 用量统计窗口：月度 token 日历
 ├── OpencodeMonitor.spec    # PyInstaller 打包配置
@@ -143,9 +151,12 @@ OpencodeMonitor/
   接口只返回 0–100 的整数百分比，因此"已用美元"按官方配额换算：**5 小时 = $12、每周 = $30、每月 = $60**。
   这与官网仪表盘口径一致。
 
-- **今日统计与月度日历（token 消耗）**：综合采集本机两个数据源，合并后按天聚合——
+- **今日统计与月度日历（token 消耗）**：综合采集本机五个数据源，合并后按天聚合——
   - opencode 本地库 `~/.local/share/opencode/opencode.db`（message 表，含 tokens 明细）
   - Claude Code 会话记录 `~/.claude/projects/*.jsonl`（assistant 消息的 usage）
+  - pi 会话记录 `~/.pi/agent/sessions/**/*.jsonl`
+  - ZCode CLI 用量库 `~/.zcode/cli/db/db.sqlite`
+  - Codex CLI 会话记录 `~/.codex/sessions/**/*.jsonl`
 
   统计口径为 `total = input + output + cache_read + cache_write`，缓存率 = `cache_read ÷ (cache_read + input)`。
   因为都是外部工具自身写入的原始记录，监测程序未运行期间产生的消耗，下次启动会**自动补全**，

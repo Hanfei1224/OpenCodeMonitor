@@ -5,6 +5,22 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.1] - 2026-08-19
+
+### Changed
+- 本地 token 统计扩展为 OpenCode、Claude Code、pi、ZCode、Codex 五数据源综合采集。
+- **main.py 拆分为 `core/` 多文件包**（高内聚低耦合）：config / state / win32 / opencode / stats /
+  api / tray / main 八个模块按职责拆分，依赖单向无环，全局状态收敛到 `core/state.py`；
+  `start.bat` 与 PyInstaller spec 同步指向 `core/main.py`。纯结构重构，行为不变。
+- 主题设置精简为背景色、强调色和不透明度，继续使用原有透明窗口方案。
+
+### Removed
+- 移除实验性的毛玻璃功能及其配置、Win32 模糊实现和界面入口。
+- 清理开发过程中产生的临时脚本、测试截图、构建产物和过期发布宣传文档。
+
+### Fixed
+- 修复按月冷查询 OpenCode 本地库时未应用月份范围、可能混入全历史 token 的问题。
+
 ## [1.2.0] - 2026-08-15
 
 ### Added
